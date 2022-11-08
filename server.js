@@ -2,6 +2,7 @@ const express = require('express');
 const dotenv = require('dotenv');
 const mssql = require('mssql');
 const console = require('console');
+const { Error } = require('globalthis/implementation');
 const app = express();
 
 dotenv.config()
@@ -13,18 +14,19 @@ const config = {
     user: process.env.SQL_UID,
     password: process.env.SQL_PWD,
     options: {
-        encrypt: false,
+        encrypt: true,
         enableArithAbort: false
     },
 };
 
-const pool = new mssql.ConnectionPool(config);
+const pool = new mssql.ConnectionPool(config, (err) => {console.log(err)});
 
 app.use(express.json());
 app.use(express.urlencoded({extended: false}));
 
 app.listen(process.env.PORT, () => {
     console.log(`Server started running on ${process.env.PORT} for ${process.env.NODE_ENV}`);
+    console.log('listening...')
 });
 app.get('/', (req, res) => {
     res.send('?? Teaming up with NodeJS and SQL Server');
@@ -32,20 +34,26 @@ app.get('/', (req, res) => {
 
 app.get('/policyBreakdown', async (req, res) => {
     try {
-        console.log("GET Policy Breakdown From DB");
-        const result = await pool.request()
-            .input("Source", req.body.source)
-            .input("State", req.body.state)
-            .input("PolicyNumber", req.body.policyNumber)
-            .input("Type", req.body.type)
-            .input("InsuredName", req.body.insuredName)
-            .input("Mode", req.body.mode)
+        const parsedReq = {
+            source:  req.body.source ?? '',
+            state: req.body.state ?? '',
+            policyNumber: req.body.policyNumber ?? '',
+            type: req.body.type ?? '',
+            insuredName: req.body.insuredName ?? '',
+            mode: req.body.mode ?? ''
+        }
+        const connection = await pool.connect()
+        const result = await connection.request()
+            .input("Source", parsedReq.source)
+            .input("State", parsedReq.state)
+            .input("PolicyNumber", parsedReq.policyNumber)
+            .input("Type", parsedReq.type)
+            .input("InsuredName", parsedReq.insuredName)
+            .input("Mode", parsedReq.mode)
             .execute('getPolicyBreakdown')
-        const dashres = result.recordset
-        console.log('Policy Breakdown Results', dashres)
-        res.json(dashres)
+        res.json({records: result.recordsets})
     } catch (err) {
-        res.status(500).json(error)
+        res.status(500).json(err)
     }
 });
 
